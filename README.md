@@ -1,2 +1,2 @@
-# playverse-mvp
-PLAYVERSE multiplayer party game MVP
+# linda-mvp
+LINDA multiplayer party game MVP
