@@ -26,7 +26,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null
 const guestId = () => {
-  const key = 'linda-guest-id'
+  const key = 'playverse-guest-id'
   let id = sessionStorage.getItem(key)
   if (!id) {
     id = crypto.randomUUID()
