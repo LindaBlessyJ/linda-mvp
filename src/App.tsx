@@ -80,7 +80,7 @@ export default function App() {
     setBusy(true); setError('')
     try {
       if (channelRef.current) await supabase.removeChannel(channelRef.current)
-      const channel = supabase.channel(`playverse-room-${roomCode}`, {
+      const channel = supabase.channel(`linda-room-${roomCode}`, {
         config: { broadcast: { self: false }, presence: { key: myId } },
       })
       channelRef.current = channel
