@@ -194,7 +194,7 @@ export default function App() {
     <main className="app-shell">
       <header className="topbar">
         <button className="icon-btn" onClick={() => void leave()} aria-label="Leave room"><ArrowLeft size={18}/></button>
-        <a className="brand" href="#" onClick={(e) => { e.preventDefault(); void leave() }}><span className="brand-mark"><Gamepad2 size={20}/></span> PLAYVERSE</a>
+        <a className="brand" href="#" onClick={(e) => { e.preventDefault(); void leave() }}><span className="brand-mark"><Gamepad2 size={20}/></span> LINDA</a>
         <span className={`connection ${connected ? 'online' : ''}`}><span className="dot"/> {connected ? 'Connected' : 'Reconnecting'}</span>
       </header>
       <section className="room-layout">
@@ -238,7 +238,7 @@ export default function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#"><span className="brand-mark"><Gamepad2 size={20}/></span> PLAYVERSE</a>
+        <a className="brand" href="#"><span className="brand-mark"><Gamepad2 size={20}/></span> LINDA</a>
         <span className="top-tag"><span className="dot"/> YOUR FRIEND GROUP, BUT A GAME</span>
       </header>
       <section className="hero">
