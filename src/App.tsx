@@ -267,5 +267,6 @@ export default function App() {
       </section>
       <footer><a className="brand footer-brand" href="#"><span className="brand-mark"><Gamepad2 size={17}/></span> PLAYVERSE</a><span>Made for connection, not comparison.</span><span className="footer-right"><ShieldCheck size={14}/> Play kindly. Skip freely.</span></footer>
     </main>
+    <footer><a className="brand footer-brand" href="#"><span className="brand-mark"><Gamepad2 size={17}/></span> LINDA</a><span>Made for connection, not comparison.</span><span className="footer-right"><ShieldCheck size={14}/> Play kindly. Skip freely.</span></footer>
   )
 }
