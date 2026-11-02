@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { createClient, type RealtimeChannel } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { ArrowLeft, Copy, Gamepad2, ShieldCheck, Sparkles } from 'lucide-react'
 
 type GameId = 'truth' | 'choices' | 'quiz' | 'friendship' | 'dreams' | 'life'
@@ -24,11 +25,12 @@ type WireMessage =
   | { type: 'PLAYER_JOIN'; player: Player }
   | { type: 'ACTION'; playerId: string; action: string; value?: string }
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
-const supabase = url && anonKey ? createClient(url, anonKey) : null
+const env = (import.meta as unknown as { env: Record<string, string | undefined> }).env
+const supabaseUrl = env.VITE_SUPABASE_URL
+const supabaseKey = env.VITE_SUPABASE_ANON_KEY
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null
 
-const getGuestId = () => {
+const getGuestId = (): string => {
   const storageKey = 'linda-guest-id'
   let id = sessionStorage.getItem(storageKey)
   if (!id) {
@@ -89,6 +91,12 @@ const questions: Record<GameId, Question[]> = {
   ],
 }
 
+const getQuestion = (state: GameState | null): Question | null => {
+  if (!state || !state.game) return null
+  const list = questions[state.game]
+  return list[state.index % list.length]
+}
+
 const newState = (roomCode: string, hostId: string, name: string): GameState => ({
   roomCode,
   hostId,
@@ -103,7 +111,8 @@ const newState = (roomCode: string, hostId: string, name: string): GameState => 
   updatedAt: Date.now(),
 })
 
-const randomCode = () => Math.random().toString(36).slice(2, 7).toUpperCase().padEnd(5, 'X')
+const randomCode = (): string =>
+  Math.random().toString(36).slice(2, 7).toUpperCase().padEnd(5, 'X')
 
 export default function App() {
   const [screen, setScreen] = useState<'home' | 'room'>('home')
@@ -115,22 +124,21 @@ export default function App() {
   const [error, setError] = useState('')
   const [response, setResponse] = useState('')
   const [copied, setCopied] = useState(false)
-  const [myId] = useState(getGuestId)
+  const [myId] = useState<string>(getGuestId)
   const channelRef = useRef<RealtimeChannel | null>(null)
   const stateRef = useRef<GameState | null>(null)
 
-  useEffect(() => { stateRef.current = state }, [state])
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
 
   const me = state?.players.find(p => p.id === myId)
   const isHost = !!state && state.hostId === myId
-  const currentQuestion = state?.game
-    ? questions[state.game][state.index % questions[state.game].length]
-    : null
+  const currentQuestion = getQuestion(state)
   const myAnswer = state?.answers[myId]
   const myVote = state?.votes[myId]
 
-  const cleanName = (value: string) =>
-    value.trim().replace(/[<>]/g, '').slice(0, 18)
+  const cleanName = (value: string) => value.trim().replace(/[<>]/g, '').slice(0, 18)
 
   const send = async (message: WireMessage) => {
     if (channelRef.current) {
@@ -148,20 +156,27 @@ export default function App() {
   const applyAction = async (playerId: string, actionName: string, value?: string) => {
     const current = stateRef.current
     if (!current || current.hostId !== myId) return
-    const q = current.game
-      ? questions[current.game][current.index % questions[current.game].length]
-      : null
+    const q = getQuestion(current)
 
     if (actionName === 'START' && value && value in questions) {
       await publish({
-        ...current, game: value as GameId, index: 0, round: 1,
-        answers: {}, votes: {}, revealed: false,
+        ...current,
+        game: value as GameId,
+        index: 0,
+        round: 1,
+        answers: {},
+        votes: {},
+        revealed: false,
       })
     } else if (actionName === 'NEXT' && current.game) {
       const list = questions[current.game]
       await publish({
-        ...current, index: (current.index + 1) % list.length,
-        round: current.round + 1, answers: {}, votes: {}, revealed: false,
+        ...current,
+        index: (current.index + 1) % list.length,
+        round: current.round + 1,
+        answers: {},
+        votes: {},
+        revealed: false,
       })
     } else if (actionName === 'REVEAL') {
       await publish({ ...current, revealed: true })
@@ -200,9 +215,13 @@ export default function App() {
   const joinRoom = async (code: string, create: boolean) => {
     const name = cleanName(nickname)
     const roomCode = code.trim().toUpperCase()
-    if (!name) { setError('Enter a nickname first.'); return }
+    if (!name) {
+      setError('Enter a nickname first.')
+      return
+    }
     if (!create && !/^[A-Z0-9]{5}$/.test(roomCode)) {
-      setError('Enter a valid 5-character room code.'); return
+      setError('Enter a valid 5-character room code.')
+      return
     }
     if (!supabase) {
       setError('Supabase is not configured. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
@@ -232,15 +251,16 @@ export default function App() {
             setScreen('room')
             setError('')
           }
-        } else if (message.type === 'REQUEST_STATE' && current?.hostId === myId) {
+        } else if (message.type === 'REQUEST_STATE' && current && current.hostId === myId) {
           void send({ type: 'STATE', state: current })
-        } else if (message.type === 'PLAYER_JOIN' && current?.hostId === myId) {
-          if (!current.players.some(p => p.id === message.player.id) && current.players.length < 12) {
+        } else if (message.type === 'PLAYER_JOIN' && current && current.hostId === myId) {
+          const exists = current.players.some(p => p.id === message.player.id)
+          if (!exists && current.players.length < 12) {
             void publish({ ...current, players: [...current.players, message.player] })
-          } else if (current.players.some(p => p.id === message.player.id)) {
+          } else if (exists) {
             void send({ type: 'STATE', state: current })
           }
-        } else if (message.type === 'ACTION' && current?.hostId === myId) {
+        } else if (message.type === 'ACTION' && current && current.hostId === myId) {
           void applyAction(message.playerId, message.action, message.value)
         }
       })
@@ -267,10 +287,7 @@ export default function App() {
         setScreen('room')
       } else {
         await send({ type: 'REQUEST_STATE' })
-        await send({
-          type: 'PLAYER_JOIN',
-          player: { id: myId, name, isHost: false },
-        })
+        await send({ type: 'PLAYER_JOIN', player: { id: myId, name, isHost: false } })
         window.setTimeout(() => {
           if (!stateRef.current) {
             setError('No host responded. Check the code or ask the host to reopen the room.')
@@ -285,8 +302,10 @@ export default function App() {
     }
   }
 
-  useEffect(() => () => {
-    if (channelRef.current && supabase) void supabase.removeChannel(channelRef.current)
+  useEffect(() => {
+    return () => {
+      if (channelRef.current && supabase) void supabase.removeChannel(channelRef.current)
+    }
   }, [])
 
   const leave = async () => {
@@ -344,7 +363,9 @@ export default function App() {
             <h1>Let the good times <span className="gradient-text">begin.</span></h1>
             <p className="muted">Share this code with your friends to play together.</p>
             <button className="room-code" onClick={() => void copyCode()}>
-              <span>{state.roomCode}</span><Copy size={17} /><small>{copied ? 'Copied!' : 'Copy code'}</small>
+              <span>{state.roomCode}</span>
+              <Copy size={17} />
+              <small>{copied ? 'Copied!' : 'Copy code'}</small>
             </button>
             {error && <p className="safe-note">{error}</p>}
           </div>
@@ -354,13 +375,21 @@ export default function App() {
               {!state.game ? (
                 <>
                   <div className="panel-top">
-                    <div><p className="eyebrow">CHOOSE A GAME</p><h2>Pick your vibe</h2></div>
+                    <div>
+                      <p className="eyebrow">CHOOSE A GAME</p>
+                      <h2>Pick your vibe</h2>
+                    </div>
                     <Sparkles size={20} />
                   </div>
                   <p className="muted">Choose a game. Everyone in this room will see it.</p>
                   <div className="mode-grid">
                     {gameInfo.map(g => (
-                      <button className="mode-card" key={g.id} onClick={() => void action('START', g.id)} disabled={!isHost}>
+                      <button
+                        className="mode-card"
+                        key={g.id}
+                        onClick={() => void action('START', g.id)}
+                        disabled={!isHost}
+                      >
                         <span className="mode-icon">{g.icon}</span>
                         <strong>{g.name}</strong>
                         <small>{g.description}</small>
@@ -383,7 +412,9 @@ export default function App() {
                     <span className="avatar">{(me?.name || nickname || '?').slice(0, 1).toUpperCase()}</span>
                     <div>
                       <small>PLAYING TOGETHER</small>
-                      <strong>{state.players.length} player{state.players.length === 1 ? '' : 's'} connected</strong>
+                      <strong>
+                        {state.players.length} player{state.players.length === 1 ? '' : 's'} connected
+                      </strong>
                     </div>
                   </div>
 
@@ -447,16 +478,6 @@ export default function App() {
                         <h3>Room responses</h3>
                         {state.players.map(p => (
                           <p key={p.id}>
-                            <strong>{p.name}:</strong> {state.answers[p.id] || state.votes[p.id] || 'Skipped / not answered'}
-                          </p>
-                        ))}
-                        {quiz && <p><strong>Correct answer:</strong> {question?.answer}</p>}
-                      </div>
-                    )}
-
-                    {quiz && <p className="muted">Your score: {state.scores[myId] || 0}</p>}
-
-                    <div className="prompt-actions">
-                      <button className="secondary-btn" onClick={() => void action('REVEAL')}>Reveal results</button>
-                      {isHost && (
-                        <button className="primary-btn" onC
+                            <strong>{p.name}:</strong>{' '}
+                            {state.answers[p.id] || state.votes[p.id] || 'Skipped / not answered'}
+                
