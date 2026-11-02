@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js'
-import {
-  ArrowLeft, Copy, Crown, Gamepad2, Heart, Link2, LoaderCircle,
-  MessageCircle, Plus, ShieldCheck, Sparkles, Users, Wifi
-} from 'lucide-react'
+import { ArrowLeft, Copy, Gamepad2, ShieldCheck, Sparkles } from 'lucide-react'
 
 type GameId = 'truth' | 'choices' | 'quiz' | 'friendship' | 'dreams' | 'life'
 type Player = { id: string; name: string; isHost: boolean }
@@ -28,15 +25,15 @@ type WireMessage =
   | { type: 'ACTION'; playerId: string; action: string; value?: string }
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
-const supabase = url && key ? createClient(url, key) : null
+const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+const supabase = url && anonKey ? createClient(url, anonKey) : null
 
 const getGuestId = () => {
-  const key = 'linda-guest-id'
-  let id = sessionStorage.getItem(key)
+  const storageKey = 'linda-guest-id'
+  let id = sessionStorage.getItem(storageKey)
   if (!id) {
     id = crypto.randomUUID()
-    sessionStorage.setItem(key, id)
+    sessionStorage.setItem(storageKey, id)
   }
   return id
 }
@@ -106,7 +103,7 @@ const newState = (roomCode: string, hostId: string, name: string): GameState => 
   updatedAt: Date.now(),
 })
 
-const randomCode = () => Math.random().toString(36).slice(2, 7).toUpperCase()
+const randomCode = () => Math.random().toString(36).slice(2, 7).toUpperCase().padEnd(5, 'X')
 
 export default function App() {
   const [screen, setScreen] = useState<'home' | 'room'>('home')
@@ -148,35 +145,39 @@ export default function App() {
     await send({ type: 'STATE', state: next })
   }
 
-  const applyAction = async (playerId: string, action: string, value?: string) => {
+  const applyAction = async (playerId: string, actionName: string, value?: string) => {
     const current = stateRef.current
     if (!current || current.hostId !== myId) return
+    const q = current.game
+      ? questions[current.game][current.index % questions[current.game].length]
+      : null
 
-    if (action === 'START' && value && value in questions) {
+    if (actionName === 'START' && value && value in questions) {
       await publish({
         ...current, game: value as GameId, index: 0, round: 1,
         answers: {}, votes: {}, revealed: false,
       })
-    } else if (action === 'NEXT' && current.game) {
+    } else if (actionName === 'NEXT' && current.game) {
       const list = questions[current.game]
       await publish({
         ...current, index: (current.index + 1) % list.length,
         round: current.round + 1, answers: {}, votes: {}, revealed: false,
       })
-    } else if (action === 'REVEAL') {
+    } else if (actionName === 'REVEAL') {
       await publish({ ...current, revealed: true })
-    } else if (action === 'ANSWER' && value) {
+    } else if (actionName === 'ANSWER' && value) {
       await publish({
         ...current,
         answers: { ...current.answers, [playerId]: value.slice(0, 500) },
       })
-    } else if (action === 'VOTE' && value) {
+    } else if (actionName === 'VOTE' && value) {
       await publish({
         ...current,
         votes: { ...current.votes, [playerId]: value },
       })
-    } else if (action === 'SCORE' && value && current.game === 'quiz') {
-      const correct = value === currentQuestion?.answer
+    } else if (actionName === 'SCORE' && value && current.game === 'quiz') {
+      if (current.answers[playerId]) return
+      const correct = value === q?.answer
       await publish({
         ...current,
         answers: { ...current.answers, [playerId]: value },
@@ -185,6 +186,8 @@ export default function App() {
           [playerId]: (current.scores[playerId] || 0) + (correct ? 1 : 0),
         },
       })
+    } else if (actionName === 'RESET') {
+      await publish({ ...current, game: null, answers: {}, votes: {}, revealed: false })
     }
   }
 
@@ -261,6 +264,7 @@ export default function App() {
         stateRef.current = first
         setState(first)
         await send({ type: 'STATE', state: first })
+        setScreen('room')
       } else {
         await send({ type: 'REQUEST_STATE' })
         await send({
@@ -273,8 +277,6 @@ export default function App() {
           }
         }, 3000)
       }
-
-      setScreen('room')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to connect to the room.')
       setConnected(false)
@@ -326,13 +328,13 @@ export default function App() {
       <main className="app-shell">
         <header className="topbar">
           <button className="icon-btn" onClick={() => void leave()} aria-label="Leave room">
-            <ArrowLeft size={18}/>
+            <ArrowLeft size={18} />
           </button>
           <a className="brand" href="#" onClick={e => e.preventDefault()}>
-            <span className="brand-mark"><Gamepad2 size={20}/></span> LINDA
+            <span className="brand-mark"><Gamepad2 size={20} /></span> LINDA
           </a>
           <span className={`connection ${connected ? 'online' : ''}`}>
-            <span className="dot"/> {connected ? 'Connected' : 'Reconnecting'}
+            <span className="dot" /> {connected ? 'Connected' : 'Reconnecting'}
           </span>
         </header>
 
@@ -342,8 +344,9 @@ export default function App() {
             <h1>Let the good times <span className="gradient-text">begin.</span></h1>
             <p className="muted">Share this code with your friends to play together.</p>
             <button className="room-code" onClick={() => void copyCode()}>
-              <span>{state.roomCode}</span><Copy size={17}/><small>{copied ? 'Copied!' : 'Copy code'}</small>
+              <span>{state.roomCode}</span><Copy size={17} /><small>{copied ? 'Copied!' : 'Copy code'}</small>
             </button>
+            {error && <p className="safe-note">{error}</p>}
           </div>
 
           <div className="game-grid">
@@ -352,12 +355,12 @@ export default function App() {
                 <>
                   <div className="panel-top">
                     <div><p className="eyebrow">CHOOSE A GAME</p><h2>Pick your vibe</h2></div>
-                    <Sparkles size={20}/>
+                    <Sparkles size={20} />
                   </div>
                   <p className="muted">Choose a game. Everyone in this room will see it.</p>
                   <div className="mode-grid">
                     {gameInfo.map(g => (
-                      <button className="mode-card" key={g.id} onClick={() => void action('START', g.id)}>
+                      <button className="mode-card" key={g.id} onClick={() => void action('START', g.id)} disabled={!isHost}>
                         <span className="mode-icon">{g.icon}</span>
                         <strong>{g.name}</strong>
                         <small>{g.description}</small>
@@ -373,12 +376,15 @@ export default function App() {
                       <p className="eyebrow">ROUND {state.round}</p>
                       <h2>{game?.icon} {game?.name}</h2>
                     </div>
-                    <span className="pill"><Sparkles size={14}/> LIVE GAME</span>
+                    <span className="pill"><Sparkles size={14} /> LIVE GAME</span>
                   </div>
 
                   <div className="turn-banner">
                     <span className="avatar">{(me?.name || nickname || '?').slice(0, 1).toUpperCase()}</span>
-                    <div><small>PLAYING TOGETHER</small><strong>{state.players.length} player{state.players.length === 1 ? '' : 's'} connected</strong></div>
+                    <div>
+                      <small>PLAYING TOGETHER</small>
+                      <strong>{state.players.length} player{state.players.length === 1 ? '' : 's'} connected</strong>
+                    </div>
                   </div>
 
                   <div className="prompt-card">
@@ -433,14 +439,16 @@ export default function App() {
                     )}
 
                     {myAnswer && (
-                      <p className="safe-note"><ShieldCheck size={15}/> Your response: {myAnswer}</p>
+                      <p className="safe-note"><ShieldCheck size={15} /> Your response: {myAnswer}</p>
                     )}
 
                     {state.revealed && (
                       <div className="results">
                         <h3>Room responses</h3>
                         {state.players.map(p => (
-                          <p key={p.id}><strong>{p.name}:</strong> {state.answers[p.id] || state.votes[p.id] || 'Skipped / not answered'}</p>
+                          <p key={p.id}>
+                            <strong>{p.name}:</strong> {state.answers[p.id] || state.votes[p.id] || 'Skipped / not answered'}
+                          </p>
                         ))}
                         {quiz && <p><strong>Correct answer:</strong> {question?.answer}</p>}
                       </div>
@@ -451,12 +459,4 @@ export default function App() {
                     <div className="prompt-actions">
                       <button className="secondary-btn" onClick={() => void action('REVEAL')}>Reveal results</button>
                       {isHost && (
-                        <button className="primary-btn" onClick={() => void action('NEXT')}>
-                          Next question →
-                        </button>
-                      )}
-                    </div>
-                    {!isHost && <p className="muted">The host advances to the next question.</p>}
-                    <button className="secondary-btn" onClick={() => isHost && void publish({ ...state, game: null, answers: {}, votes: {}, revealed: false })} disabled={!isHost}>
-                      Choose another game
-          
+                        <button className="primary-btn" onC
