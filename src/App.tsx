@@ -7,36 +7,24 @@ type GameId = 'truth' | 'choices' | 'quiz' | 'friendship' | 'dreams' | 'life'
 type Player = { id: string; name: string; isHost: boolean }
 type Question = { question: string; options?: string[]; answer?: string }
 type GameState = {
-  roomCode: string
-  hostId: string
-  players: Player[]
-  game: GameId | null
-  index: number
-  round: number
-  answers: Record<string, string>
-  votes: Record<string, string>
-  scores: Record<string, number>
-  revealed: boolean
-  updatedAt: number
+  roomCode: string; hostId: string; players: Player[]; game: GameId | null
+  index: number; round: number; answers: Record<string, string>
+  votes: Record<string, string>; scores: Record<string, number>
+  revealed: boolean; updatedAt: number
 }
-type WireMessage =
+type Wire =
   | { type: 'STATE'; state: GameState }
   | { type: 'REQUEST_STATE' }
   | { type: 'PLAYER_JOIN'; player: Player }
   | { type: 'ACTION'; playerId: string; action: string; value?: string }
 
 const env = (import.meta as unknown as { env: Record<string, string | undefined> }).env
-const supabaseUrl = env.VITE_SUPABASE_URL
-const supabaseKey = env.VITE_SUPABASE_ANON_KEY
-const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null
+const supabase = env.VITE_SUPABASE_URL && env.VITE_SUPABASE_ANON_KEY
+  ? createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY) : null
 
 const getGuestId = (): string => {
-  const storageKey = 'linda-guest-id'
-  let id = sessionStorage.getItem(storageKey)
-  if (!id) {
-    id = crypto.randomUUID()
-    sessionStorage.setItem(storageKey, id)
-  }
+  let id = sessionStorage.getItem('linda-guest-id')
+  if (!id) { id = crypto.randomUUID(); sessionStorage.setItem('linda-guest-id', id) }
   return id
 }
 
@@ -49,70 +37,62 @@ const gameInfo: { id: GameId; name: string; icon: string; description: string }[
   { id: 'life', name: 'Life Mode', icon: '🌍', description: 'Make decisions in everyday situations.' },
 ]
 
+const Q = (question: string, options?: string[], answer?: string): Question => ({ question, options, answer })
+
 const questions: Record<GameId, Question[]> = {
   truth: [
-    { question: 'TRUTH: What is one thing you wish people understood about you?' },
-    { question: 'TRUTH: What quality do you value most in a friend?' },
-    { question: 'TRUTH: What is something new you want to learn?' },
-    { question: 'DARE: Say one thing you appreciate about someone in the room.' },
-    { question: 'DARE: Describe your dream day in 20 seconds.' },
-    { question: 'TRUTH: What is a small moment that made you happy recently?' },
+    Q('TRUTH: What is one thing you wish people understood about you?'),
+    Q('TRUTH: What quality do you value most in a friend?'),
+    Q('TRUTH: What is something new you want to learn?'),
+    Q('DARE: Say one thing you appreciate about someone in the room.'),
+    Q('DARE: Describe your dream day in 20 seconds.'),
+    Q('TRUTH: What is a small moment that made you happy recently?'),
   ],
   choices: [
-    { question: 'Would you choose a secure path or take a thoughtful risk for a dream?', options: ['Secure path', 'Thoughtful risk'] },
-    { question: 'When a friend is upset, what should come first?', options: ['Listen first', 'Give advice'] },
-    { question: 'What would you rather have?', options: ['More free time', 'More chances to learn'] },
-    { question: 'When a team disagrees, what helps most?', options: ['Honest discussion', 'Try a small solution'] },
+    Q('Secure path or thoughtful risk for a dream?', ['Secure path', 'Thoughtful risk']),
+    Q('When a friend is upset, what should come first?', ['Listen first', 'Give advice']),
+    Q('What would you rather have?', ['More free time', 'More chances to learn']),
+    Q('When a team disagrees, what helps most?', ['Honest discussion', 'Try a small solution']),
   ],
   quiz: [
-    { question: 'Which planet is known as the Red Planet?', options: ['Venus', 'Mars', 'Jupiter', 'Mercury'], answer: 'Mars' },
-    { question: 'How many sides does a hexagon have?', options: ['Five', 'Six', 'Seven', 'Eight'], answer: 'Six' },
-    { question: 'Which language runs natively in a web browser?', options: ['JavaScript', 'C', 'SQL', 'Bash'], answer: 'JavaScript' },
-    { question: 'What does CPU stand for?', options: ['Central Processing Unit', 'Computer Power Utility', 'Core Program Unit', 'Central Program User'], answer: 'Central Processing Unit' },
-    { question: 'Which is the largest ocean?', options: ['Atlantic', 'Indian', 'Pacific', 'Arctic'], answer: 'Pacific' },
+    Q('Which planet is known as the Red Planet?', ['Venus', 'Mars', 'Jupiter', 'Mercury'], 'Mars'),
+    Q('How many sides does a hexagon have?', ['Five', 'Six', 'Seven', 'Eight'], 'Six'),
+    Q('Which language runs natively in a browser?', ['JavaScript', 'C', 'SQL', 'Bash'], 'JavaScript'),
+    Q('What does CPU stand for?', ['Central Processing Unit', 'Computer Power Utility', 'Core Program Unit', 'Central Program User'], 'Central Processing Unit'),
+    Q('Which is the largest ocean?', ['Atlantic', 'Indian', 'Pacific', 'Arctic'], 'Pacific'),
   ],
   friendship: [
-    { question: 'What makes someone a dependable friend?', options: ['Keeping promises', 'Being popular', 'Always agreeing', 'Buying gifts'] },
-    { question: 'How should friends handle a misunderstanding?', options: ['Talk respectfully', 'Ignore it forever', 'Spread rumours', 'Blame someone'] },
-    { question: 'What matters most in friendship?', options: ['Trust', 'Competition', 'Perfect agreement', 'Popularity'] },
-    { question: 'How can you support a friend having a hard day?', options: ['Listen and ask what they need', 'Force them to talk', 'Make fun of them', 'Compare problems'] },
+    Q('What makes someone a dependable friend?', ['Keeping promises', 'Being popular', 'Always agreeing', 'Buying gifts']),
+    Q('How should friends handle a misunderstanding?', ['Talk respectfully', 'Ignore it forever', 'Spread rumours', 'Blame someone']),
+    Q('What matters most in friendship?', ['Trust', 'Competition', 'Perfect agreement', 'Popularity']),
+    Q('How can you support a friend having a hard day?', ['Listen and ask what they need', 'Force them to talk', 'Make fun of them', 'Compare problems']),
   ],
   dreams: [
-    { question: 'What is one skill you would love to develop?' },
-    { question: 'What positive impact would you like to make in your community?' },
-    { question: 'What is one achievable goal you want to work toward this year?' },
-    { question: 'If you could learn from an expert, what would you ask?' },
+    Q('What is one skill you would love to develop?'),
+    Q('What positive impact would you like to make in your community?'),
+    Q('What is one achievable goal for this year?'),
+    Q('If you could learn from an expert, what would you ask?'),
   ],
   life: [
-    { question: 'Your group project is late. What should you do first?', options: ['Divide tasks fairly', 'Blame someone', 'Give up', 'Hide the problem'] },
-    { question: 'Someone is being left out. What is a thoughtful response?', options: ['Invite them to join', 'Laugh along', 'Ignore them', 'Make assumptions'] },
-    { question: 'You receive feedback you disagree with. What helps most?', options: ['Listen and consider it', 'Argue immediately', 'Ignore all feedback', 'Take it personally'] },
-    { question: 'You have several tasks due soon. What should you do first?', options: ['Prioritise tasks', 'Avoid everything', 'Choose randomly', 'Wait until the last minute'] },
+    Q('Your group project is late. What first?', ['Divide tasks fairly', 'Blame someone', 'Give up', 'Hide the problem']),
+    Q('Someone is being left out. What now?', ['Invite them to join', 'Laugh along', 'Ignore them', 'Make assumptions']),
+    Q('Feedback you disagree with. What helps?', ['Listen and consider it', 'Argue immediately', 'Ignore all feedback', 'Take it personally']),
+    Q('Many tasks due soon. What first?', ['Prioritise tasks', 'Avoid everything', 'Choose randomly', 'Wait until the last minute']),
   ],
 }
 
-const getQuestion = (state: GameState | null): Question | null => {
-  if (!state || !state.game) return null
-  const list = questions[state.game]
-  return list[state.index % list.length]
+const getQuestion = (s: GameState | null): Question | null => {
+  if (!s || !s.game) return null
+  const list = questions[s.game]
+  return list[s.index % list.length]
 }
 
 const newState = (roomCode: string, hostId: string, name: string): GameState => ({
-  roomCode,
-  hostId,
-  players: [{ id: hostId, name, isHost: true }],
-  game: null,
-  index: 0,
-  round: 0,
-  answers: {},
-  votes: {},
-  scores: {},
-  revealed: false,
-  updatedAt: Date.now(),
+  roomCode, hostId, players: [{ id: hostId, name, isHost: true }], game: null,
+  index: 0, round: 0, answers: {}, votes: {}, scores: {}, revealed: false, updatedAt: Date.now(),
 })
 
-const randomCode = (): string =>
-  Math.random().toString(36).slice(2, 7).toUpperCase().padEnd(5, 'X')
+const randomCode = (): string => Math.random().toString(36).slice(2, 7).toUpperCase().padEnd(5, 'X')
 
 export default function App() {
   const [screen, setScreen] = useState<'home' | 'room'>('home')
@@ -128,22 +108,16 @@ export default function App() {
   const channelRef = useRef<RealtimeChannel | null>(null)
   const stateRef = useRef<GameState | null>(null)
 
-  useEffect(() => {
-    stateRef.current = state
-  }, [state])
+  useEffect(() => { stateRef.current = state }, [state])
 
-  const me = state?.players.find(p => p.id === myId)
   const isHost = !!state && state.hostId === myId
-  const currentQuestion = getQuestion(state)
-  const myAnswer = state?.answers[myId]
-  const myVote = state?.votes[myId]
+  const question = getQuestion(state)
+  const quiz = state?.game === 'quiz'
+  const isWriting = state?.game === 'truth' || state?.game === 'dreams'
+  const choices = !!question?.options
 
-  const cleanName = (value: string) => value.trim().replace(/[<>]/g, '').slice(0, 18)
-
-  const send = async (message: WireMessage) => {
-    if (channelRef.current) {
-      await channelRef.current.send({ type: 'broadcast', event: 'game', payload: message })
-    }
+  const send = async (m: Wire) => {
+    if (channelRef.current) await channelRef.current.send({ type: 'broadcast', event: 'game', payload: m })
   }
 
   const publish = async (next: GameState) => {
@@ -153,56 +127,30 @@ export default function App() {
     await send({ type: 'STATE', state: next })
   }
 
-  const applyAction = async (playerId: string, actionName: string, value?: string) => {
-    const current = stateRef.current
-    if (!current || current.hostId !== myId) return
-    const q = getQuestion(current)
-
-    if (actionName === 'START' && value && value in questions) {
+  const applyAction = async (pid: string, act: string, value?: string) => {
+    const c = stateRef.current
+    if (!c || c.hostId !== myId) return
+    const fresh = { answers: {}, votes: {}, revealed: false }
+    if (act === 'START' && value && value in questions) {
+      await publish({ ...c, game: value as GameId, index: 0, round: 1, ...fresh })
+    } else if (act === 'NEXT' && c.game) {
+      await publish({ ...c, index: (c.index + 1) % questions[c.game].length, round: c.round + 1, ...fresh })
+    } else if (act === 'REVEAL') {
+      await publish({ ...c, revealed: true })
+    } else if (act === 'ANSWER' && value) {
+      await publish({ ...c, answers: { ...c.answers, [pid]: value.slice(0, 500) } })
+    } else if (act === 'VOTE' && value) {
+      await publish({ ...c, votes: { ...c.votes, [pid]: value } })
+    } else if (act === 'SCORE' && value && c.game === 'quiz') {
+      if (c.answers[pid]) return
+      const ok = value === getQuestion(c)?.answer
       await publish({
-        ...current,
-        game: value as GameId,
-        index: 0,
-        round: 1,
-        answers: {},
-        votes: {},
-        revealed: false,
+        ...c,
+        answers: { ...c.answers, [pid]: value },
+        scores: { ...c.scores, [pid]: (c.scores[pid] || 0) + (ok ? 1 : 0) },
       })
-    } else if (actionName === 'NEXT' && current.game) {
-      const list = questions[current.game]
-      await publish({
-        ...current,
-        index: (current.index + 1) % list.length,
-        round: current.round + 1,
-        answers: {},
-        votes: {},
-        revealed: false,
-      })
-    } else if (actionName === 'REVEAL') {
-      await publish({ ...current, revealed: true })
-    } else if (actionName === 'ANSWER' && value) {
-      await publish({
-        ...current,
-        answers: { ...current.answers, [playerId]: value.slice(0, 500) },
-      })
-    } else if (actionName === 'VOTE' && value) {
-      await publish({
-        ...current,
-        votes: { ...current.votes, [playerId]: value },
-      })
-    } else if (actionName === 'SCORE' && value && current.game === 'quiz') {
-      if (current.answers[playerId]) return
-      const correct = value === q?.answer
-      await publish({
-        ...current,
-        answers: { ...current.answers, [playerId]: value },
-        scores: {
-          ...current.scores,
-          [playerId]: (current.scores[playerId] || 0) + (correct ? 1 : 0),
-        },
-      })
-    } else if (actionName === 'RESET') {
-      await publish({ ...current, game: null, answers: {}, votes: {}, revealed: false })
+    } else if (act === 'RESET') {
+      await publish({ ...c, game: null, ...fresh })
     }
   }
 
@@ -213,72 +161,49 @@ export default function App() {
   }
 
   const joinRoom = async (code: string, create: boolean) => {
-    const name = cleanName(nickname)
+    const name = nickname.trim().replace(/[<>]/g, '').slice(0, 18)
     const roomCode = code.trim().toUpperCase()
-    if (!name) {
-      setError('Enter a nickname first.')
-      return
-    }
-    if (!create && !/^[A-Z0-9]{5}$/.test(roomCode)) {
-      setError('Enter a valid 5-character room code.')
-      return
-    }
-    if (!supabase) {
-      setError('Supabase is not configured. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
-      return
-    }
-
+    if (!name) { setError('Enter a nickname first.'); return }
+    if (!create && !/^[A-Z0-9]{5}$/.test(roomCode)) { setError('Enter a valid 5-character room code.'); return }
+    if (!supabase) { setError('Supabase is not configured. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'); return }
     setBusy(true)
     setError('')
     sessionStorage.setItem('linda-name', name)
-
     try {
       if (channelRef.current) await supabase.removeChannel(channelRef.current)
-
       const channel = supabase.channel(`linda-room-${roomCode}`, {
         config: { broadcast: { self: false }, presence: { key: myId } },
       })
       channelRef.current = channel
-
       channel.on('broadcast', { event: 'game' }, ({ payload }) => {
-        const message = payload as WireMessage
-        const current = stateRef.current
-
-        if (message.type === 'STATE') {
-          if (!current || current.roomCode === message.state.roomCode) {
-            stateRef.current = message.state
-            setState(message.state)
+        const m = payload as Wire
+        const c = stateRef.current
+        if (m.type === 'STATE') {
+          if (!c || c.roomCode === m.state.roomCode) {
+            stateRef.current = m.state
+            setState(m.state)
             setScreen('room')
             setError('')
           }
-        } else if (message.type === 'REQUEST_STATE' && current && current.hostId === myId) {
-          void send({ type: 'STATE', state: current })
-        } else if (message.type === 'PLAYER_JOIN' && current && current.hostId === myId) {
-          const exists = current.players.some(p => p.id === message.player.id)
-          if (!exists && current.players.length < 12) {
-            void publish({ ...current, players: [...current.players, message.player] })
-          } else if (exists) {
-            void send({ type: 'STATE', state: current })
-          }
-        } else if (message.type === 'ACTION' && current && current.hostId === myId) {
-          void applyAction(message.playerId, message.action, message.value)
+        } else if (m.type === 'REQUEST_STATE' && c && c.hostId === myId) {
+          void send({ type: 'STATE', state: c })
+        } else if (m.type === 'PLAYER_JOIN' && c && c.hostId === myId) {
+          const exists = c.players.some(p => p.id === m.player.id)
+          if (!exists && c.players.length < 12) void publish({ ...c, players: [...c.players, m.player] })
+          else if (exists) void send({ type: 'STATE', state: c })
+        } else if (m.type === 'ACTION' && c && c.hostId === myId) {
+          void applyAction(m.playerId, m.action, m.value)
         }
       })
-
       channel.on('presence', { event: 'sync' }, () => setConnected(true))
-
       await new Promise<void>((resolve, reject) => {
         channel.subscribe(status => {
           if (status === 'SUBSCRIBED') resolve()
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            reject(new Error('Could not connect. Check your internet and Supabase settings.'))
-          }
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') reject(new Error('Could not connect. Check your internet and Supabase settings.'))
         })
       })
-
       await channel.track({ id: myId, nickname: name, joinedAt: Date.now() })
       setConnected(true)
-
       if (create) {
         const first = newState(roomCode, myId, name)
         stateRef.current = first
@@ -289,9 +214,7 @@ export default function App() {
         await send({ type: 'REQUEST_STATE' })
         await send({ type: 'PLAYER_JOIN', player: { id: myId, name, isHost: false } })
         window.setTimeout(() => {
-          if (!stateRef.current) {
-            setError('No host responded. Check the code or ask the host to reopen the room.')
-          }
+          if (!stateRef.current) setError('No host responded. Check the code or ask the host to reopen the room.')
         }, 3000)
       }
     } catch (e) {
@@ -302,10 +225,8 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    return () => {
-      if (channelRef.current && supabase) void supabase.removeChannel(channelRef.current)
-    }
+  useEffect(() => () => {
+    if (channelRef.current && supabase) void supabase.removeChannel(channelRef.current)
   }, [])
 
   const leave = async () => {
@@ -338,23 +259,14 @@ export default function App() {
 
   if (screen === 'room' && state) {
     const game = gameInfo.find(g => g.id === state.game)
-    const question = currentQuestion
-    const quiz = state.game === 'quiz'
-    const choices = !!question?.options
-    const isWriting = state.game === 'truth' || state.game === 'dreams'
-
+    const myAnswer = state.answers[myId]
+    const myVote = state.votes[myId]
     return (
       <main className="app-shell">
         <header className="topbar">
-          <button className="icon-btn" onClick={() => void leave()} aria-label="Leave room">
-            <ArrowLeft size={18} />
-          </button>
-          <a className="brand" href="#" onClick={e => e.preventDefault()}>
-            <span className="brand-mark"><Gamepad2 size={20} /></span> LINDA
-          </a>
-          <span className={`connection ${connected ? 'online' : ''}`}>
-            <span className="dot" /> {connected ? 'Connected' : 'Reconnecting'}
-          </span>
+          <button className="icon-btn" onClick={() => void leave()} aria-label="Leave room"><ArrowLeft size={18} /></button>
+          <span className="brand"><span className="brand-mark"><Gamepad2 size={20} /></span> LINDA</span>
+          <span className={`connection ${connected ? 'online' : ''}`}><span className="dot" /> {connected ? 'Connected' : 'Reconnecting'}</span>
         </header>
 
         <section className="room-layout">
@@ -363,9 +275,7 @@ export default function App() {
             <h1>Let the good times <span className="gradient-text">begin.</span></h1>
             <p className="muted">Share this code with your friends to play together.</p>
             <button className="room-code" onClick={() => void copyCode()}>
-              <span>{state.roomCode}</span>
-              <Copy size={17} />
-              <small>{copied ? 'Copied!' : 'Copy code'}</small>
+              <span>{state.roomCode}</span><Copy size={17} /><small>{copied ? 'Copied!' : 'Copy code'}</small>
             </button>
             {error && <p className="safe-note">{error}</p>}
           </div>
@@ -375,21 +285,13 @@ export default function App() {
               {!state.game ? (
                 <>
                   <div className="panel-top">
-                    <div>
-                      <p className="eyebrow">CHOOSE A GAME</p>
-                      <h2>Pick your vibe</h2>
-                    </div>
+                    <div><p className="eyebrow">CHOOSE A GAME</p><h2>Pick your vibe</h2></div>
                     <Sparkles size={20} />
                   </div>
                   <p className="muted">Choose a game. Everyone in this room will see it.</p>
                   <div className="mode-grid">
                     {gameInfo.map(g => (
-                      <button
-                        className="mode-card"
-                        key={g.id}
-                        onClick={() => void action('START', g.id)}
-                        disabled={!isHost}
-                      >
+                      <button className="mode-card" key={g.id} disabled={!isHost} onClick={() => void action('START', g.id)}>
                         <span className="mode-icon">{g.icon}</span>
                         <strong>{g.name}</strong>
                         <small>{g.description}</small>
@@ -401,52 +303,25 @@ export default function App() {
               ) : (
                 <>
                   <div className="panel-top">
-                    <div>
-                      <p className="eyebrow">ROUND {state.round}</p>
-                      <h2>{game?.icon} {game?.name}</h2>
-                    </div>
+                    <div><p className="eyebrow">ROUND {state.round}</p><h2>{game?.icon} {game?.name}</h2></div>
                     <span className="pill"><Sparkles size={14} /> LIVE GAME</span>
-                  </div>
-
-                  <div className="turn-banner">
-                    <span className="avatar">{(me?.name || nickname || '?').slice(0, 1).toUpperCase()}</span>
-                    <div>
-                      <small>PLAYING TOGETHER</small>
-                      <strong>
-                        {state.players.length} player{state.players.length === 1 ? '' : 's'} connected
-                      </strong>
-                    </div>
                   </div>
 
                   <div className="prompt-card">
                     <span className="prompt-type">{quiz ? '🧠 QUIZ QUESTION' : '✨ YOUR QUESTION'}</span>
                     <p>{question?.question}</p>
 
-                    {choices && !quiz && (
+                    {choices && (
                       <div className="choice-buttons">
-                        {question?.options?.map(option => (
+                        {question?.options?.map(o => (
                           <button
-                            className={`choice ${myVote === option ? 'selected' : ''}`}
-                            key={option}
-                            onClick={() => void action('VOTE', option)}
+                            key={o}
+                            className={`choice ${(quiz ? state.revealed && o === question.answer : myVote === o) ? 'selected' : ''}`}
+                            disabled={quiz ? !!myAnswer : false}
+                            onClick={() => void action(quiz ? 'SCORE' : 'VOTE', o)}
                           >
-                            <strong>{option}</strong>
-                            {myVote === option && <small>YOUR VOTE ✓</small>}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {quiz && (
-                      <div className="choice-buttons">
-                        {question?.options?.map(option => (
-                          <button
-                            className={`choice ${state.revealed && option === question.answer ? 'selected' : ''}`}
-                            key={option}
-                            onClick={() => void action('SCORE', option)}
-                            disabled={!!state.answers[myId]}
-                          >
-                            <strong>{option}</strong>
+                            <strong>{o}</strong>
+                            {!quiz && myVote === o && <small>YOUR VOTE ✓</small>}
                           </button>
                         ))}
                       </div>
@@ -465,19 +340,77 @@ export default function App() {
                       </div>
                     )}
 
-                    {!choices && !isWriting && !quiz && (
-                      <p className="muted">Think about your answer, then share it with the group.</p>
-                    )}
+                    {!choices && !isWriting && <p className="muted">Think about your answer, then share it with the group.</p>}
 
-                    {myAnswer && (
-                      <p className="safe-note"><ShieldCheck size={15} /> Your response: {myAnswer}</p>
-                    )}
+                    {myAnswer && !quiz && <p className="safe-note"><ShieldCheck size={15} /> Your response: {myAnswer}</p>}
 
                     {state.revealed && (
                       <div className="results">
                         <h3>Room responses</h3>
                         {state.players.map(p => (
                           <p key={p.id}>
-                            <strong>{p.name}:</strong>{' '}
-                            {state.answers[p.id] || state.votes[p.id] || 'Skipped / not answered'}
-                
+                            <strong>{p.name}:</strong> {state.answers[p.id] || state.votes[p.id] || 'Skipped / not answered'}
+                          </p>
+                        ))}
+                        {quiz && <p><strong>Correct answer:</strong> {question?.answer}</p>}
+                      </div>
+                    )}
+
+                    {quiz && <p className="muted">Your score: {state.scores[myId] || 0}</p>}
+
+                    <div className="prompt-actions">
+                      <button className="secondary-btn" onClick={() => void action('REVEAL')}>Reveal results</button>
+                      {isHost && <button className="primary-btn" onClick={() => void action('NEXT')}>Next question →</button>}
+                    </div>
+                    {!isHost && <p className="muted">The host advances to the next question.</p>}
+                    <button className="secondary-btn" disabled={!isHost} onClick={() => void action('RESET')}>
+                      Choose another game
+                    </button>
+                  </div>
+                </>
+              )}
+            </section>
+
+            <aside className="panel players-panel">
+              <div className="panel-top"><div><p className="eyebrow">PLAYERS</p><h2>In this room</h2></div></div>
+              {state.players.map(p => (
+                <div className="turn-banner" key={p.id}>
+                  <span className="avatar">{p.name.slice(0, 1).toUpperCase()}</span>
+                  <div>
+                    <strong>{p.name}{p.id === myId ? ' (you)' : ''}</strong>
+                    <small>{p.isHost ? 'HOST' : 'PLAYER'}</small>
+                  </div>
+                </div>
+              ))}
+            </aside>
+          </div>
+        </section>
+      </main>
+    )
+  }
+
+  return (
+    <main className="app-shell">
+      <header className="topbar">
+        <span className="brand"><span className="brand-mark"><Gamepad2 size={20} /></span> LINDA</span>
+      </header>
+      <section className="room-layout">
+        <div className="room-heading">
+          <p className="eyebrow">PLAY TOGETHER</p>
+          <h1>Games with <span className="gradient-text">friends.</span></h1>
+          <p className="muted">Create a private room or join one with a code.</p>
+        </div>
+        <section className="panel game-panel">
+          <input className="field" placeholder="Your nickname" maxLength={18} value={nickname} onChange={e => setNickname(e.target.value)} />
+          <button className="primary-btn" disabled={busy} onClick={() => void joinRoom(randomCode(), true)}>
+            {busy ? 'Connecting…' : 'Create room'}
+          </button>
+          <p className="muted">or join an existing room</p>
+          <input className="field" placeholder="5-character room code" maxLength={5} value={roomInput} onChange={e => setRoomInput(e.target.value.toUpperCase())} />
+          <button className="secondary-btn" disabled={busy} onClick={() => void joinRoom(roomInput, false)}>Join room</button>
+          {error && <p className="safe-note">{error}</p>}
+        </section>
+      </section>
+    </main>
+  )
+      }
